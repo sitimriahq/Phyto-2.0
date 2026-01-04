@@ -1,10 +1,58 @@
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, Info, Leaf, Trash2, AlertCircle, Shield, Bug, FileImage, Droplets, History, ChevronRight, Eye, Search, Target, BrainCircuit } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { 
+  Camera, Upload, Info, Leaf, Trash2, AlertCircle, Shield, Bug, FileImage, 
+  Droplets, History, ChevronRight, Eye, Search, Target, BrainCircuit, 
+  ThumbsUp, ThumbsDown, MessageSquare, Check, HelpCircle, Activity, 
+  ZoomIn, ZoomOut, Move, FlaskConical, ShieldCheck, Sprout, Zap, Heart, 
+  Clock, Lightbulb, AlertTriangle, BarChart3, TrendingUp, UserCheck
+} from 'lucide-react';
 import { DISEASE_DATABASE } from './constants';
-import { AnalysisResult, DiseaseStage, ImageQuality, HistoryItem } from './types';
+import { AnalysisResult, DiseaseStage, ImageQuality, HistoryItem, UserFeedback, TreatmentProtocol } from './types';
 import { analyzeImageQuality, calculateSeverity } from './imageProcessor';
 import { analyzePlantImage } from './geminiService';
+
+const TREATMENT_METADATA: Record<string, { label: string; icon: any; color: string; bgColor: string }> = {
+  immediate: { label: 'Immediate Actions', icon: Clock, color: 'text-rose-600', bgColor: 'bg-rose-50' },
+  chemical: { label: 'Chemical Control', icon: FlaskConical, color: 'text-blue-600', bgColor: 'bg-blue-50' },
+  cultural: { label: 'Cultural Practices', icon: Sprout, color: 'text-emerald-600', bgColor: 'bg-emerald-50' },
+  preventive: { label: 'Prevention Strategy', icon: ShieldCheck, color: 'text-indigo-600', bgColor: 'bg-indigo-50' },
+  nutritional: { label: 'Nutritional Support', icon: Zap, color: 'text-amber-600', bgColor: 'bg-amber-50' },
+  recovery: { label: 'Recovery Phase', icon: Heart, color: 'text-pink-600', bgColor: 'bg-pink-50' },
+  photographyTips: { label: 'Photography Tips', icon: Camera, color: 'text-slate-600', bgColor: 'bg-slate-50' },
+  tips: { label: 'Expert Tips', icon: Lightbulb, color: 'text-yellow-600', bgColor: 'bg-yellow-50' }
+};
+
+const TreatmentSection: React.FC<{ protocol: TreatmentProtocol }> = ({ protocol }) => {
+  return (
+    <div className="space-y-6">
+      {Object.entries(protocol).map(([key, steps]) => {
+        if (!steps || (Array.isArray(steps) && steps.length === 0)) return null;
+        const meta = TREATMENT_METADATA[key] || { label: key, icon: Info, color: 'text-slate-600', bgColor: 'bg-slate-50' };
+        const Icon = meta.icon;
+
+        return (
+          <div key={key} className={`rounded-2xl border border-slate-100 overflow-hidden shadow-sm bg-white`}>
+            <div className={`px-4 py-3 flex items-center gap-3 ${meta.bgColor} border-b border-slate-100`}>
+              <Icon className={`w-5 h-5 ${meta.color}`} />
+              <h5 className={`text-xs font-black uppercase tracking-widest ${meta.color}`}>{meta.label}</h5>
+            </div>
+            <div className="p-4 space-y-3">
+              {(steps as string[]).map((step, i) => (
+                <div key={i} className="flex gap-3 items-start group">
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 border border-slate-100 text-[10px] font-bold text-slate-400 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 transition-all`}>
+                    {i + 1}
+                  </div>
+                  <p className="text-xs text-slate-700 leading-relaxed">{step}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
 
 const SeverityBadge: React.FC<{ severity: number }> = ({ severity }) => {
   const badges = [
@@ -29,20 +77,48 @@ const ConfidenceGauge: React.FC<{ confidence: number }> = ({ confidence }) => {
   else if (percentage >= 70) { color = 'bg-amber-500'; label = 'Medium Confidence'; }
 
   return (
-    <div className="w-full space-y-1">
-      <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400">
-        <span>AI Reliability</span>
-        <span className={percentage >= 70 ? 'text-slate-600' : 'text-rose-500'}>{label}</span>
+    <div className="w-full space-y-2">
+      <div className="flex justify-between items-end">
+        <div className="space-y-0.5">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">AI Trust Level</p>
+          <p className={`text-sm font-black ${percentage >= 70 ? 'text-slate-800' : 'text-rose-600'}`}>{label} ({percentage}%)</p>
+        </div>
+        <span title="Percentage indicates how sure the AI is about this specific diagnosis based on the quality and symptoms visible.">
+          <HelpCircle className="w-4 h-4 text-slate-300 cursor-help" />
+        </span>
       </div>
-      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+      <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200">
         <div 
-          className={`h-full transition-all duration-1000 ease-out ${color}`} 
+          className={`h-full transition-all duration-1000 ease-out ${color} shadow-[0_0_8px_rgba(0,0,0,0.1)]`} 
           style={{ width: `${percentage}%` }}
         />
       </div>
-      <p className="text-[10px] text-slate-500 italic">
-        The model is {percentage}% sure based on current visual evidence.
-      </p>
+    </div>
+  );
+};
+
+const HeatmapOverlay: React.FC<{ show: boolean; region: string; zoom: number }> = ({ show, region, zoom }) => {
+  if (!show) return null;
+  
+  let flexClass = "items-center justify-center";
+  if (region.includes("left")) flexClass = "items-center justify-start ml-12";
+  if (region.includes("right")) flexClass = "items-center justify-end mr-12";
+  if (region.includes("top")) flexClass = "items-start justify-center mt-12";
+  if (region.includes("bottom")) flexClass = "items-end justify-center mb-12";
+
+  return (
+    <div className={`absolute inset-0 pointer-events-none flex ${flexClass}`}>
+       <div className="relative">
+          <div className="absolute inset-0 bg-red-500 rounded-full blur-[40px] opacity-40 animate-pulse scale-150" />
+          <div className="absolute inset-0 bg-yellow-400 rounded-full blur-[20px] opacity-60 animate-pulse scale-110" />
+          <div className="border-2 border-white/50 w-24 h-24 rounded-full flex items-center justify-center backdrop-blur-[2px]">
+            <Target className="w-8 h-8 text-white drop-shadow-lg animate-bounce" />
+          </div>
+       </div>
+       <div className="absolute top-4 left-4 bg-slate-900/90 text-white text-[9px] px-2 py-1.5 rounded-lg font-black flex items-center gap-2 shadow-xl border border-white/20">
+          <Activity className="w-3 h-3 text-emerald-400" /> CONCEPTUAL HEATMAP (AI FOCUS)
+       </div>
+       <div className="absolute w-full h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_20px_rgba(52,211,153,0.8)] top-0 left-0 animate-[scan_4s_infinite]" />
     </div>
   );
 };
@@ -55,9 +131,18 @@ const App: React.FC = () => {
   const [imageQuality, setImageQuality] = useState<ImageQuality | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [showOverlay, setShowOverlay] = useState(false);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [showCorrectionForm, setShowCorrectionForm] = useState(false);
+  
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Load history on mount
   useEffect(() => {
     const savedHistory = localStorage.getItem('phytoscan_analysis_history');
     if (savedHistory) {
@@ -71,21 +156,45 @@ const App: React.FC = () => {
 
   const saveToHistory = (res: AnalysisResult) => {
     const newItem: HistoryItem = {
-      id: crypto.randomUUID(),
+      id: res.id,
       timestamp: res.timestamp,
       stage: res.stage,
       diseaseName: res.disease.name,
       confidence: res.confidence,
       severityScore: res.severityScore,
+      userFeedback: res.userFeedback
     };
-
     const updatedHistory = [newItem, ...history].slice(0, 50);
     setHistory(updatedHistory);
     localStorage.setItem('phytoscan_analysis_history', JSON.stringify(updatedHistory));
   };
 
+  const submitFeedback = (isCorrect: boolean, suggestedStage?: DiseaseStage) => {
+    if (!result) return;
+    const feedback: UserFeedback = {
+      id: crypto.randomUUID(),
+      analysisId: result.id,
+      isCorrect,
+      userSuggestedStage: suggestedStage,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Update local state for current result
+    const updatedResult = { ...result, userFeedback: feedback };
+    setResult(updatedResult);
+    setFeedbackSubmitted(true);
+    setShowCorrectionForm(false);
+    
+    // Update the record in history
+    const updatedHistory = history.map(item => 
+      item.id === result.id ? { ...item, userFeedback: feedback } : item
+    );
+    setHistory(updatedHistory);
+    localStorage.setItem('phytoscan_analysis_history', JSON.stringify(updatedHistory));
+  };
+
   const clearHistory = () => {
-    if (window.confirm("Are you sure you want to clear your entire analysis history?")) {
+    if (window.confirm("Are you sure? All analysis records and feedback stats will be wiped.")) {
       setHistory([]);
       localStorage.removeItem('phytoscan_analysis_history');
     }
@@ -94,22 +203,16 @@ const App: React.FC = () => {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!file.type.startsWith('image/')) {
-        alert('Please upload an image file.');
-        return;
-      }
-      if (file.size > 10 * 1024 * 1024) {
-        alert('Image file is too large (max 10MB).');
-        return;
-      }
-      
       const reader = new FileReader();
       reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setSelectedImage(base64);
+        setSelectedImage(reader.result as string);
         setResult(null);
         setImageQuality(null);
         setShowOverlay(false);
+        setFeedbackSubmitted(false);
+        setShowCorrectionForm(false);
+        setZoom(1);
+        setPan({ x: 0, y: 0 });
       };
       reader.readAsDataURL(file);
     }
@@ -119,16 +222,16 @@ const App: React.FC = () => {
     if (!selectedImage) return;
     setAnalyzing(true);
     setShowOverlay(false);
-    
+    setFeedbackSubmitted(false);
+    setShowCorrectionForm(false);
     try {
       const quality = await analyzeImageQuality(selectedImage);
       setImageQuality(quality);
-
       const aiResult = await analyzePlantImage(selectedImage);
       const stage = aiResult.stage as DiseaseStage;
       const severityScore = calculateSeverity(stage, aiResult.lesionCount, aiResult.avgLesionSize);
-
       const finalResult: AnalysisResult = {
+        id: crypto.randomUUID(),
         stage,
         confidence: aiResult.confidence,
         disease: DISEASE_DATABASE[stage],
@@ -143,18 +246,15 @@ const App: React.FC = () => {
           overexposed: quality.hasOverexposure
         } : null,
         aiExplanation: aiResult.explanation,
+        reasoningForFarmer: aiResult.reasoningForFarmer,
         detectedSymptoms: aiResult.detectedSymptoms || [],
         visualEvidenceRegions: aiResult.visualEvidenceRegions || ""
       };
-
       setResult(finalResult);
       saveToHistory(finalResult);
-      // Auto-show overlay after short delay if disease found
-      if (stage !== 'H0' && stage !== 'N0') {
-        setTimeout(() => setShowOverlay(true), 1500);
-      }
+      if (stage !== 'H0' && stage !== 'N0') setTimeout(() => setShowOverlay(true), 1200);
     } catch (error) {
-      alert("Failed to analyze image. Please check your internet connection and try again.");
+      alert("Analysis failed. Please check your network.");
     } finally {
       setAnalyzing(false);
     }
@@ -165,43 +265,60 @@ const App: React.FC = () => {
     setResult(null);
     setImageQuality(null);
     setShowOverlay(false);
+    setFeedbackSubmitted(false);
+    setShowCorrectionForm(false);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+    if (zoom <= 1) return;
+    setIsDragging(true);
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    setDragStart({ x: clientX - pan.x, y: clientY - pan.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isDragging || zoom <= 1) return;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    setPan({
+      x: clientX - dragStart.x,
+      y: clientY - dragStart.y
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Memoized statistics for the Reliability Dashboard
+  const stats = useMemo(() => {
+    if (history.length === 0) return { total: 0, confirmed: 0, corrected: 0, accuracy: 0 };
+    const confirmed = history.filter(h => h.userFeedback?.isCorrect === true).length;
+    const corrected = history.filter(h => h.userFeedback?.isCorrect === false).length;
+    const withFeedback = confirmed + corrected;
+    const accuracy = withFeedback > 0 ? Math.round((confirmed / withFeedback) * 100) : 0;
+    return { total: history.length, confirmed, corrected, accuracy };
+  }, [history]);
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
+    <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="bg-emerald-700 text-white shadow-lg sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="bg-white p-2 rounded-xl shadow-inner">
-              <Leaf className="w-8 h-8 text-emerald-600" />
-            </div>
+            <div className="bg-white p-2 rounded-xl shadow-inner"><Leaf className="w-8 h-8 text-emerald-600" /></div>
             <div>
               <h1 className="text-xl md:text-2xl font-bold tracking-tight">PhytoScan</h1>
-              <p className="text-emerald-100 text-xs opacity-90 text-nowrap">Expert Cercospora Diagnosis</p>
+              <p className="text-emerald-100 text-[10px] opacity-90 font-black uppercase tracking-widest">Kangkung Health Expert</p>
             </div>
           </div>
-          
-          <nav className="flex bg-emerald-800/50 p-1 rounded-xl overflow-x-auto no-scrollbar">
-            <button
-              onClick={() => setActiveTab('scanner')}
-              className={`flex items-center gap-2 px-4 md:px-6 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 ${activeTab === 'scanner' ? 'bg-white text-emerald-800 shadow-md' : 'text-emerald-100 hover:text-white'}`}
-            >
-              <Camera className="w-4 h-4" /> Scanner
-            </button>
-            <button
-              onClick={() => setActiveTab('history')}
-              className={`flex items-center gap-2 px-4 md:px-6 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 ${activeTab === 'history' ? 'bg-white text-emerald-800 shadow-md' : 'text-emerald-100 hover:text-white'}`}
-            >
-              <History className="w-4 h-4" /> History
-            </button>
-            <button
-              onClick={() => setActiveTab('database')}
-              className={`flex items-center gap-2 px-4 md:px-6 py-2 rounded-lg text-sm font-semibold transition-all shrink-0 ${activeTab === 'database' ? 'bg-white text-emerald-800 shadow-md' : 'text-emerald-100 hover:text-white'}`}
-            >
-              <Info className="w-4 h-4" /> Encyclopedia
-            </button>
+          <nav className="flex bg-emerald-800/50 p-1 rounded-xl">
+            <button onClick={() => setActiveTab('scanner')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black transition-all ${activeTab === 'scanner' ? 'bg-white text-emerald-800 shadow-md' : 'text-emerald-100'}`}><Camera className="w-4 h-4" /> SCANNER</button>
+            <button onClick={() => setActiveTab('history')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black transition-all ${activeTab === 'history' ? 'bg-white text-emerald-800 shadow-md' : 'text-emerald-100'}`}><History className="w-4 h-4" /> HISTORY</button>
+            <button onClick={() => setActiveTab('database')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black transition-all ${activeTab === 'database' ? 'bg-white text-emerald-800 shadow-md' : 'text-emerald-100'}`}><Info className="w-4 h-4" /> GUIDE</button>
           </nav>
         </div>
       </header>
@@ -209,463 +326,329 @@ const App: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 py-8">
         {activeTab === 'scanner' ? (
           <div className="grid lg:grid-cols-2 gap-8">
-            {/* Input Section */}
             <div className="space-y-6">
               <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200">
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                      <Upload className="w-5 h-5 text-emerald-600" /> Image Input
-                    </h2>
-                    {selectedImage && (
-                      <button onClick={resetScanner} className="text-rose-500 hover:bg-rose-50 p-2 rounded-full transition-colors">
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    )}
+                    <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Upload className="w-5 h-5 text-emerald-600" /> Image Input</h2>
+                    {selectedImage && <button onClick={resetScanner} className="text-rose-500 hover:bg-rose-50 p-2 rounded-full transition-colors"><Trash2 className="w-5 h-5" /></button>}
                   </div>
-
                   {!selectedImage ? (
                     <div className="group relative border-2 border-dashed border-slate-300 rounded-2xl p-12 text-center hover:border-emerald-500 transition-all cursor-pointer bg-slate-50">
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      />
+                      <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                       <div className="flex flex-col items-center gap-4">
-                        <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
-                          <Upload className="w-10 h-10 text-emerald-600" />
-                        </div>
-                        <div>
-                          <p className="text-slate-800 font-bold">Select Leaf Image</p>
-                          <p className="text-slate-500 text-sm mt-1">Upload a clear photo of the infected leaf</p>
-                        </div>
-                        <span className="px-6 py-2 bg-emerald-600 text-white rounded-xl font-bold text-sm">Browse Files</span>
+                        <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform"><Upload className="w-10 h-10 text-emerald-600" /></div>
+                        <div><p className="text-slate-800 font-bold text-lg">Select Leaf Image</p><p className="text-slate-500 text-sm mt-1">Upload a clear photo for AI diagnosis</p></div>
+                        <span className="px-8 py-3 bg-emerald-600 text-white rounded-xl font-black text-sm shadow-lg">BROWSE FILES</span>
                       </div>
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <div className="relative rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 h-80 flex items-center justify-center group">
-                        <img src={selectedImage} alt="Kangkung leaf" className="max-h-full object-contain" />
+                      <div 
+                        ref={containerRef}
+                        className={`relative rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 aspect-video flex items-center justify-center group ${zoom > 1 ? 'cursor-move' : 'cursor-default'}`}
+                        onMouseDown={handleMouseDown}
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                        onMouseLeave={handleMouseUp}
+                        onTouchStart={handleMouseDown}
+                        onTouchMove={handleMouseMove}
+                        onTouchEnd={handleMouseUp}
+                      >
+                        <img 
+                          ref={imageRef}
+                          src={selectedImage} 
+                          alt="Kangkung leaf" 
+                          className="max-h-full transition-transform duration-200 ease-out pointer-events-none select-none"
+                          style={{ 
+                            transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)` 
+                          }}
+                        />
+                        <HeatmapOverlay show={showOverlay && !!result && result.stage !== 'H0'} region={result?.visualEvidenceRegions || ""} zoom={zoom} />
                         
-                        {/* AI Heatmap Simulation Overlay */}
-                        {showOverlay && result && result.stage !== 'H0' && result.stage !== 'N0' && (
-                          <div className="absolute inset-0 bg-rose-500/20 pointer-events-none animate-pulse flex items-center justify-center">
-                             <div className="border-4 border-rose-500 w-32 h-32 rounded-full blur-xl opacity-50 bg-rose-500" />
-                             <div className="absolute top-4 left-4 bg-rose-600 text-white text-[10px] px-2 py-1 rounded font-black flex items-center gap-1 shadow-lg">
-                                <Target className="w-3 h-3" /> AI DETECTED ANOMALY
-                             </div>
-                             {/* Scanning Line Animation */}
-                             <div className="absolute w-full h-0.5 bg-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.8)] top-0 left-0 animate-[scan_3s_infinite]" />
+                        {zoom > 1 && (
+                          <div className="absolute top-4 right-4 bg-slate-900/80 text-white text-[10px] px-2 py-1 rounded-full font-bold backdrop-blur flex items-center gap-1.5 border border-white/20">
+                            <Move className="w-3 h-3 text-emerald-400" /> DRAG TO PAN ({zoom.toFixed(1)}x)
                           </div>
                         )}
 
                         <div className="absolute bottom-3 left-3 flex gap-2">
-                           {result && (result.stage !== 'H0' && result.stage !== 'N0') && (
-                             <button 
-                               onClick={() => setShowOverlay(!showOverlay)}
-                               className={`p-2 rounded-lg backdrop-blur flex items-center gap-2 text-[10px] font-bold shadow-lg transition-all ${showOverlay ? 'bg-emerald-600 text-white' : 'bg-white/80 text-slate-700'}`}
-                             >
+                           {result && result.stage !== 'H0' && result.stage !== 'N0' && (
+                             <button onClick={(e) => { e.stopPropagation(); setShowOverlay(!showOverlay); }} className={`p-2 rounded-lg backdrop-blur flex items-center gap-2 text-[10px] font-black shadow-lg transition-all ${showOverlay ? 'bg-emerald-600 text-white' : 'bg-white/90 text-slate-700 border border-slate-200'}`}>
                                <Eye className="w-3 h-3" /> {showOverlay ? 'HIDE AI HEATMAP' : 'SHOW AI HEATMAP'}
                              </button>
                            )}
                         </div>
-
-                        {imageQuality && (
-                          <div className="absolute bottom-3 right-3 bg-slate-900/80 backdrop-blur text-white text-[10px] px-2 py-1 rounded-lg uppercase tracking-wider font-bold">
-                            {imageQuality.resolution.width} × {imageQuality.resolution.height}
-                          </div>
-                        )}
                       </div>
 
-                      {imageQuality && (imageQuality.isTooDark || imageQuality.hasShadows || imageQuality.isLowRes) && (
-                        <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex gap-3">
-                          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
-                          <div>
-                            <p className="text-amber-800 text-sm font-bold">Quality Concerns Detected</p>
-                            <p className="text-amber-700 text-xs mt-1">Poor quality images may yield inaccurate results.</p>
-                          </div>
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex items-center gap-4">
+                        <ZoomOut className="w-4 h-4 text-slate-400 shrink-0" />
+                        <div className="flex-1 px-1">
+                          <input 
+                            type="range" 
+                            min="1" 
+                            max="4" 
+                            step="0.1" 
+                            value={zoom} 
+                            onChange={(e) => {
+                              const nextZoom = parseFloat(e.target.value);
+                              if (nextZoom === 1) setPan({ x: 0, y: 0 });
+                              setZoom(nextZoom);
+                            }}
+                            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                          />
                         </div>
-                      )}
-
-                      <div className="flex gap-3">
-                        <button
-                          onClick={runAnalysis}
-                          disabled={analyzing}
-                          className="flex-1 bg-emerald-600 text-white py-4 rounded-xl font-bold hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        <ZoomIn className="w-4 h-4 text-slate-400 shrink-0" />
+                        <button 
+                          onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+                          className="text-[10px] font-black bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors uppercase tracking-widest shadow-sm"
                         >
-                          {analyzing ? (
-                            <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Analyzing...</>
-                          ) : (
-                            <><Camera className="w-5 h-5" /> Start AI Detection</>
-                          )}
+                          Reset
                         </button>
                       </div>
+
+                      <button onClick={runAnalysis} disabled={analyzing} className="w-full bg-emerald-600 text-white py-5 rounded-2xl font-black hover:bg-emerald-700 transition-all shadow-xl disabled:opacity-50 flex items-center justify-center gap-3">
+                        {analyzing ? <><div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin" /> ANALYZING...</> : <><Camera className="w-6 h-6" /> START AI DETECTION</>}
+                      </button>
                     </div>
                   )}
                 </div>
               </div>
-
-              <div className="bg-blue-50 border border-blue-100 rounded-3xl p-6">
-                <h3 className="font-bold text-blue-900 flex items-center gap-2 mb-4 text-sm">
-                  <Shield className="w-4 h-4" /> Capture Guidelines
-                </h3>
-                <div className="grid grid-cols-2 gap-4 text-xs text-blue-800">
-                  <div className="flex gap-2">
-                    <span className="text-blue-500 font-bold">●</span>
-                    <span>Use direct, natural sunlight</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-blue-500 font-bold">●</span>
-                    <span>Hold camera 15-20cm away</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-blue-500 font-bold">●</span>
-                    <span>Keep leaf flat and clean</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-blue-500 font-bold">●</span>
-                    <span>Focus on main lesion area</span>
-                  </div>
-                </div>
-              </div>
             </div>
 
-            {/* Results Section */}
             <div className="space-y-6">
               {!result ? (
-                <div className="bg-white rounded-3xl border border-slate-200 h-full min-h-[400px] flex flex-col items-center justify-center p-12 text-center text-slate-400">
-                   <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6">
-                    <Leaf className="w-12 h-12 opacity-20" />
-                   </div>
-                   <h3 className="text-lg font-bold text-slate-700">Ready for Analysis</h3>
-                   <p className="text-sm mt-2 max-w-xs">Upload an image and run the AI scanner to see detailed disease diagnostic data.</p>
+                <div className="bg-white rounded-3xl border border-slate-200 h-full min-h-[400px] flex flex-col items-center justify-center p-12 text-center">
+                   <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6 shadow-inner"><Leaf className="w-12 h-12 text-slate-200" /></div>
+                   <h3 className="text-lg font-black text-slate-400 uppercase tracking-widest">Awaiting Analysis</h3>
                 </div>
               ) : (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6 pb-8">
-                  <div className={`${result.disease.bgColor} ${result.disease.borderColor} border-2 rounded-3xl p-6 shadow-sm overflow-hidden relative`}>
-                    <div className="flex items-start justify-between mb-6">
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+                  <div className={`${result.disease.bgColor} ${result.disease.borderColor} border-2 rounded-3xl p-6 shadow-lg overflow-hidden relative`}>
+                    <div className="flex items-start justify-between mb-8">
                       <div className="flex items-center gap-4">
-                        <div className={`p-3 rounded-2xl bg-white shadow-sm`}>
-                          <result.disease.icon className={`w-8 h-8 ${result.disease.color}`} />
-                        </div>
+                        <div className="p-4 rounded-2xl bg-white shadow-md"><result.disease.icon className={`w-10 h-10 ${result.disease.color}`} /></div>
                         <div>
-                          <p className="text-[10px] font-black tracking-widest text-slate-400 uppercase">Detection Result</p>
-                          <h3 className={`text-2xl font-black ${result.disease.color}`}>{result.disease.name}</h3>
-                          <div className="mt-1"><SeverityBadge severity={result.disease.severity} /></div>
+                          <p className="text-[10px] font-black tracking-widest text-slate-400 uppercase">Stage {result.stage}</p>
+                          <h3 className={`text-3xl font-black ${result.disease.color} leading-none mb-2`}>{result.disease.name}</h3>
+                          <SeverityBadge severity={result.disease.severity} />
                         </div>
                       </div>
                     </div>
+                    <ConfidenceGauge confidence={result.confidence} />
+                  </div>
 
-                    <div className="mb-6 p-4 bg-white/40 border border-white/60 rounded-2xl">
-                      <ConfidenceGauge confidence={result.confidence} />
+                  {/* Feedback Section - Enhanced for user interaction */}
+                  <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-2xl overflow-hidden relative group">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-16 -mt-16 opacity-50" />
+                    <div className="flex items-center justify-between mb-4 relative z-10">
+                      <h4 className="font-black flex items-center gap-2 text-sm tracking-widest uppercase"><MessageSquare className="w-4 h-4 text-emerald-400" /> Quality Feedback</h4>
+                      {feedbackSubmitted && <div className="bg-emerald-500 p-1 rounded-full"><Check className="w-3 h-3 text-white" /></div>}
                     </div>
-
-                    <p className="text-slate-700 text-sm leading-relaxed mb-6 font-medium">
-                      {result.disease.description}
-                    </p>
-
-                    {result.lesionCount > 0 && (
-                      <div className="grid grid-cols-3 gap-3 mb-6">
-                        <div className="bg-white/80 backdrop-blur-sm p-3 rounded-2xl border border-white/50">
-                          <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Lesions</p>
-                          <p className="text-lg font-black text-slate-800">{result.lesionCount}</p>
+                    
+                    {feedbackSubmitted ? (
+                      <div className="animate-in fade-in zoom-in-95 duration-500 relative z-10">
+                        <div className="bg-white/10 p-4 rounded-2xl border border-white/10 flex items-center gap-3">
+                           <div className="p-2 bg-emerald-500 rounded-full"><ThumbsUp className="w-4 h-4" /></div>
+                           <p className="text-xs font-bold text-emerald-100">Feedback Recorded. This data helps improve the Kangkung model accuracy over time.</p>
                         </div>
-                        <div className="bg-white/80 backdrop-blur-sm p-3 rounded-2xl border border-white/50">
-                          <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Avg Size</p>
-                          <p className="text-lg font-black text-slate-800">{result.avgLesionSize.toFixed(1)}mm</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 relative z-10">
+                        <p className="text-xs text-slate-400">Is the AI classification for <strong>{result.disease.name}</strong> accurate?</p>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => submitFeedback(true)} 
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] active:scale-[0.98]"
+                          >
+                            <ThumbsUp className="w-3 h-3" /> CONFIRM
+                          </button>
+                          <button 
+                            onClick={() => setShowCorrectionForm(true)} 
+                            className="flex-1 bg-white/10 hover:bg-white/20 text-white py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 border border-white/10 hover:scale-[1.02] active:scale-[0.98]"
+                          >
+                            <ThumbsDown className="w-3 h-3" /> REPORT ERROR
+                          </button>
                         </div>
-                        <div className="bg-white/80 backdrop-blur-sm p-3 rounded-2xl border border-white/50">
-                          <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Severity</p>
-                          <p className="text-lg font-black text-rose-600">{result.severityScore}%</p>
-                        </div>
+                        {showCorrectionForm && (
+                          <div className="mt-4 p-4 bg-white/5 border border-white/10 rounded-2xl animate-in slide-in-from-top-2">
+                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Which stage is it actually?</p>
+                             <div className="grid grid-cols-2 gap-2">
+                                {Object.entries(DISEASE_DATABASE).map(([code, d]) => (
+                                  <button 
+                                    key={code} 
+                                    onClick={() => submitFeedback(false, code as DiseaseStage)} 
+                                    className="py-2.5 text-[9px] font-black border border-white/20 rounded-lg hover:bg-emerald-600 hover:border-emerald-600 transition-all uppercase tracking-tighter"
+                                  >
+                                    {d.name.split(' ')[0]}
+                                  </button>
+                                ))}
+                             </div>
+                          </div>
+                        )}
                       </div>
                     )}
+                  </div>
 
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-                      Analyzed on {result.timestamp}
+                  <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-xl overflow-hidden relative">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full blur-3xl -mr-16 -mt-16 opacity-50" />
+                    <h4 className="font-black text-slate-900 flex items-center gap-2 mb-6 text-lg tracking-tight">
+                      <BrainCircuit className="w-6 h-6 text-indigo-600" /> AI Diagnostic Reasoning
+                    </h4>
+                    <div className="space-y-6 relative z-10">
+                       <div className="p-5 bg-indigo-50 border border-indigo-100 rounded-2xl">
+                          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-2">Technical Insight</p>
+                          <p className="text-slate-800 leading-relaxed font-medium">"{result.reasoningForFarmer}"</p>
+                       </div>
                     </div>
                   </div>
 
-                  {/* AI Explainability & Detected Symptoms */}
-                  <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
-                    <h4 className="font-black text-slate-800 flex items-center gap-2 mb-4">
-                      <BrainCircuit className="w-5 h-5 text-indigo-600" /> AI Diagnostic Insight
+                  <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm">
+                    <h4 className="font-black text-slate-800 flex items-center gap-2 mb-6 text-lg tracking-tight">
+                      <Shield className="w-6 h-6 text-emerald-600" /> Treatment Protocol
                     </h4>
-                    
-                    <div className="space-y-6">
-                       {result.detectedSymptoms.length > 0 && (
-                         <div>
-                            <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Visible Markers Found</p>
-                            <div className="flex flex-wrap gap-2">
-                               {result.detectedSymptoms.map((sym, i) => (
-                                 <span key={i} className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-100 flex items-center gap-1">
-                                    <Search className="w-3 h-3" /> {sym}
-                                 </span>
-                               ))}
-                            </div>
-                         </div>
-                       )}
-
-                       {result.visualEvidenceRegions && (
-                         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                            <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Focus Areas</p>
-                            <p className="text-sm text-slate-700">The AI model identified primary infection indicators in the <strong>{result.visualEvidenceRegions}</strong> of the image.</p>
-                         </div>
-                       )}
-
-                       {result.aiExplanation && (
-                        <div className="relative p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
-                          <p className="text-[10px] font-black text-emerald-600 uppercase mb-2">Technical Analysis</p>
-                          <p className="text-sm text-slate-700 italic">"{result.aiExplanation}"</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
-                    <h4 className="font-black text-slate-800 flex items-center gap-2 mb-4">
-                      <Shield className="w-5 h-5 text-emerald-600" /> Treatment Protocol
-                    </h4>
-                    <div className="space-y-4">
-                      {result.disease.treatment.immediate.map((step, i) => (
-                        <div key={i} className="flex gap-3 items-start group">
-                          <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                            <span className="text-[10px] font-bold">{i+1}</span>
-                          </div>
-                          <p className="text-sm text-slate-700 leading-snug">{step}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <button
-                      onClick={() => {
-                        setActiveTab('database');
-                        setTimeout(() => document.getElementById(result.stage)?.scrollIntoView({ behavior: 'smooth' }), 100);
-                      }}
-                      className="w-full mt-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-bold text-sm transition-all"
-                    >
-                      View Full Encyclopedia Guide
-                    </button>
+                    <TreatmentSection protocol={result.disease.treatment} />
                   </div>
                 </div>
               )}
             </div>
           </div>
         ) : activeTab === 'history' ? (
-          /* History View */
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
-            <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div>
-                <h2 className="text-3xl font-black text-slate-900 mb-2">Analysis History</h2>
-                <p className="text-slate-500 max-w-xl leading-relaxed">
-                  Review your previous plant health assessments. Your history is stored locally on this device.
-                </p>
-              </div>
-              {history.length > 0 && (
-                <button 
-                  onClick={clearHistory}
-                  className="flex items-center gap-2 px-6 py-3 bg-rose-50 text-rose-600 rounded-2xl font-bold text-sm hover:bg-rose-100 transition-all border border-rose-100"
-                >
-                  <Trash2 className="w-4 h-4" /> Clear All History
-                </button>
+            {/* Reliability Dashboard */}
+            <div className="grid md:grid-cols-3 gap-6">
+               <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center mb-4"><BarChart3 className="w-5 h-5 text-indigo-600" /></div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Model Precision</p>
+                    <h3 className="text-3xl font-black text-slate-800 mt-1">{stats.accuracy}%</h3>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-4 leading-relaxed font-medium">Agreement rate between the AI model and your manual confirmations.</p>
+               </div>
+               <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center mb-4"><UserCheck className="w-5 h-5 text-emerald-600" /></div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Confirmed Diagnoses</p>
+                    <h3 className="text-3xl font-black text-slate-800 mt-1">{stats.confirmed}</h3>
+                  </div>
+                  <div className="mt-4 flex items-center gap-2 text-emerald-600">
+                    <TrendingUp className="w-3 h-3" />
+                    <span className="text-[10px] font-bold uppercase tracking-tighter">Healthy verification flow</span>
+                  </div>
+               </div>
+               <div className="bg-emerald-700 p-6 rounded-3xl shadow-xl flex flex-col justify-between relative overflow-hidden">
+                  <Activity className="absolute bottom-0 right-0 w-32 h-32 text-white/5 -mb-8 -mr-8" />
+                  <div className="relative z-10">
+                    <p className="text-[10px] font-black text-emerald-100 uppercase tracking-widest">Total Assessments</p>
+                    <h3 className="text-4xl font-black text-white mt-1">{stats.total}</h3>
+                  </div>
+                  <button 
+                    onClick={clearHistory}
+                    className="mt-6 w-full py-2.5 bg-white/10 hover:bg-rose-500 text-white rounded-xl font-black text-[10px] transition-all uppercase tracking-widest flex items-center justify-center gap-2 border border-white/20"
+                  >
+                    <Trash2 className="w-3 h-3" /> WIPE LOCAL DATA
+                  </button>
+               </div>
+            </div>
+
+            <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-lg">
+              <h2 className="text-2xl font-black text-slate-900 mb-6">Activity Feed</h2>
+              {history.length === 0 ? (
+                <div className="p-20 flex flex-col items-center text-center">
+                  <History className="w-12 h-12 text-slate-200 mb-4" />
+                  <h3 className="text-lg font-bold text-slate-400">No records found</h3>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {history.map((item) => {
+                    const disease = DISEASE_DATABASE[item.stage];
+                    return (
+                      <div key={item.id} className="bg-slate-50 rounded-2xl border border-slate-200 p-4 flex flex-col md:flex-row md:items-center gap-4 hover:border-emerald-500 transition-all group">
+                        <div className={`w-14 h-14 rounded-2xl ${disease.bgColor} flex items-center justify-center border border-white shrink-0 shadow-sm`}><disease.icon className={`w-7 h-7 ${disease.color}`} /></div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-1">
+                            <h4 className="font-black text-slate-800 text-base">{item.diseaseName}</h4>
+                            <span className="text-[9px] font-black text-slate-400 bg-white px-2 py-0.5 rounded-full border shadow-sm uppercase">{item.stage}</span>
+                            {item.userFeedback && (
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border shadow-sm uppercase flex items-center gap-1 ${item.userFeedback.isCorrect ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>
+                                {item.userFeedback.isCorrect ? <UserCheck className="w-2 h-2" /> : <AlertTriangle className="w-2 h-2" />}
+                                {item.userFeedback.isCorrect ? 'CONFIRMED' : `USER FLAG: ${item.userFeedback.userSuggestedStage}`}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex gap-4 text-[10px] font-bold">
+                             <span className="text-slate-400">{item.timestamp}</span>
+                             <span className="text-emerald-600">{Math.round(item.confidence * 100)}% Confidence</span>
+                             <span className="text-rose-500">{item.severityScore}% Severity</span>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => { setActiveTab('database'); setTimeout(() => document.getElementById(item.stage)?.scrollIntoView({ behavior: 'smooth' }), 100); }} 
+                          className="flex items-center gap-2 px-6 py-3 bg-white text-slate-600 rounded-xl font-black text-[10px] hover:bg-emerald-600 hover:text-white border border-slate-200 self-end md:self-center uppercase transition-all shadow-sm"
+                        >
+                          Protocol <ChevronRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
-
-            {history.length === 0 ? (
-              <div className="bg-white rounded-3xl border border-slate-200 p-16 flex flex-col items-center text-center">
-                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-6">
-                  <History className="w-10 h-10 text-slate-300" />
-                </div>
-                <h3 className="text-xl font-bold text-slate-800">No History Yet</h3>
-                <p className="text-slate-500 mt-2 max-w-xs">Your successful disease analyses will appear here once you start scanning.</p>
-                <button 
-                  onClick={() => setActiveTab('scanner')}
-                  className="mt-8 px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-md"
-                >
-                  Start Scanning
-                </button>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {history.map((item) => {
-                  const disease = DISEASE_DATABASE[item.stage];
-                  return (
-                    <div 
-                      key={item.id} 
-                      className="group bg-white rounded-2xl border border-slate-200 p-4 md:p-6 flex flex-col md:flex-row md:items-center gap-4 hover:shadow-md transition-all hover:border-emerald-200"
-                    >
-                      <div className={`w-16 h-16 rounded-2xl ${disease.bgColor} flex items-center justify-center shrink-0 border border-white shadow-sm`}>
-                        <disease.icon className={`w-8 h-8 ${disease.color}`} />
-                      </div>
-                      
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-black text-slate-800">{item.diseaseName}</h4>
-                          <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-2 py-0.5 rounded uppercase">{item.stage}</span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                          <p className="text-xs text-slate-500 font-medium">{item.timestamp}</p>
-                          <p className="text-xs text-emerald-600 font-bold">{(item.confidence * 100).toFixed(1)}% Confidence</p>
-                          <p className="text-xs text-rose-500 font-bold">{item.severityScore}% Severity</p>
-                        </div>
-                      </div>
-
-                      <button 
-                        onClick={() => {
-                          setActiveTab('database');
-                          setTimeout(() => document.getElementById(item.stage)?.scrollIntoView({ behavior: 'smooth' }), 100);
-                        }}
-                        className="flex items-center gap-2 px-6 py-3 bg-slate-50 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all border border-slate-100 self-end md:self-center"
-                      >
-                        View Guide <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
         ) : (
-          /* Database View */
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-lg">
-              <h2 className="text-3xl font-black text-slate-900 mb-2">Staging Encyclopedia</h2>
-              <p className="text-slate-500 max-w-2xl leading-relaxed">
-                Standardized H0-E3 classification system for Cercospora leaf spot in Water Spinach (Ipomoea aquatica). 
-                Identifying the pathogen Cercospora spp. for effective management.
-              </p>
-            </div>
-
-            <div className="grid gap-6">
-              {Object.entries(DISEASE_DATABASE).map(([code, d]) => (
-                <div key={code} id={code} className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                  <div className={`${d.bgColor} p-6 border-b border-slate-100`}>
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className="bg-white p-3 rounded-2xl shadow-sm">
-                          <d.icon className={`w-8 h-8 ${d.color}`} />
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-black tracking-widest text-slate-400 uppercase">Stage {code}</p>
-                          <h3 className={`text-2xl font-black ${d.color}`}>{d.name}</h3>
-                        </div>
-                      </div>
-                      <SeverityBadge severity={d.severity} />
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+             <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-lg">
+                <h2 className="text-3xl font-black text-slate-900 mb-2">Diagnostic Encyclopedia</h2>
+                <p className="text-slate-500 text-sm leading-relaxed max-w-2xl">Standardized staging system for Cercospora leaf spot in Water Spinach. Used as a reference for AI validation.</p>
+             </div>
+             <div className="grid gap-6">
+                {Object.entries(DISEASE_DATABASE).map(([code, d]) => (
+                  <div key={code} id={code} className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-all">
+                    <div className={`${d.bgColor} p-6 border-b border-slate-100 flex justify-between items-center`}>
+                       <div className="flex items-center gap-4">
+                          <div className="bg-white p-3 rounded-2xl shadow-sm"><d.icon className={`w-8 h-8 ${d.color}`} /></div>
+                          <div><p className="text-[10px] font-black tracking-widest text-slate-400 uppercase">Stage {code}</p><h3 className={`text-xl font-black ${d.color}`}>{d.name}</h3></div>
+                       </div>
+                       <SeverityBadge severity={d.severity} />
+                    </div>
+                    <div className="p-6 grid md:grid-cols-2 gap-8">
+                       <div className="space-y-8">
+                          <section>
+                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Bug className="w-3 h-3 text-rose-500" /> Key Features</h4>
+                             <div className="flex flex-wrap gap-2">
+                                {d.symptoms.map((s, i) => <span key={i} className="px-3 py-1.5 bg-slate-50 text-slate-600 rounded-xl text-[10px] font-bold border border-slate-100 leading-none">{s}</span>)}
+                             </div>
+                          </section>
+                          <section>
+                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><AlertTriangle className="w-3 h-3 text-amber-500" /> Action Protocols</h4>
+                             <TreatmentSection protocol={d.treatment} />
+                          </section>
+                       </div>
+                       <div className="bg-slate-900 text-white p-6 rounded-2xl space-y-4 shadow-xl self-start sticky top-24">
+                          <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Biological Path</p><p className="text-xs leading-relaxed opacity-90">{d.biologicalInterpretation}</p></div>
+                          <div className="pt-4 border-t border-white/10"><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">AI Visual Cue</p><p className="text-xs leading-relaxed italic opacity-80">{d.visualDescription}</p></div>
+                          {d.prognosis && (
+                            <div className="pt-4 border-t border-white/10"><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Expert Prognosis</p><p className="text-xs leading-relaxed opacity-90 text-emerald-400 font-bold">{d.prognosis}</p></div>
+                          )}
+                       </div>
                     </div>
                   </div>
-
-                  <div className="p-6 grid md:grid-cols-3 gap-8">
-                    <div className="md:col-span-2 space-y-6">
-                      <section>
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                          <Bug className="w-3 h-3 text-rose-500" /> Observable Symptoms
-                        </h4>
-                        <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          {d.symptoms.map((s, i) => (
-                            <li key={i} className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> {s}
-                            </li>
-                          ))}
-                        </ul>
-                      </section>
-
-                      <section>
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                          <Droplets className="w-3 h-3 text-blue-500" /> Protocol
-                        </h4>
-                        <div className="space-y-3">
-                          {Object.entries(d.treatment).slice(0, 3).map(([cat, steps]) => (
-                            <div key={cat} className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                              <p className="text-[10px] font-black text-slate-500 uppercase mb-2 tracking-tighter">{cat}</p>
-                              <ul className="space-y-1.5">
-                                {(steps as string[]).map((step, i) => (
-                                  <li key={i} className="text-xs text-slate-600 flex items-start gap-2">
-                                    <span className="text-emerald-600 font-bold leading-none mt-0.5">›</span>
-                                    <span>{step}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          ))}
-                        </div>
-                      </section>
-                    </div>
-
-                    <div className="space-y-6">
-                      <div className="bg-indigo-50/50 rounded-2xl p-5 border border-indigo-100">
-                        <h4 className="text-[10px] font-black text-indigo-400 uppercase mb-2 tracking-widest">Biological Note</h4>
-                        <p className="text-xs text-indigo-900 leading-relaxed font-medium">{d.biologicalInterpretation}</p>
-                      </div>
-                      
-                      {d.prognosis && (
-                        <div className="bg-purple-50/50 rounded-2xl p-5 border border-purple-100">
-                          <h4 className="text-[10px] font-black text-purple-400 uppercase mb-2 tracking-widest">Prognosis</h4>
-                          <p className="text-xs text-purple-900 font-bold">{d.prognosis}</p>
-                        </div>
-                      )}
-
-                      <div className="bg-slate-900 text-white rounded-2xl p-5">
-                         <h4 className="text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">Visual Marker</h4>
-                         <p className="text-xs text-slate-100 leading-relaxed">{d.visualDescription}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+             </div>
           </div>
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="bg-slate-900 text-slate-400 py-12 mt-12 border-t border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 grid md:grid-cols-4 gap-12 text-xs">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-white">
-              <Leaf className="w-6 h-6 text-emerald-500" />
-              <span className="text-lg font-black tracking-tighter">PhytoScan</span>
-            </div>
-            <p className="leading-relaxed">Advanced CNN-based diagnosis for Ipomoea aquatica, helping farmers and researchers identify diseases early for sustainable agriculture.</p>
-          </div>
-          <div className="space-y-3">
-            <h4 className="text-white font-bold uppercase tracking-widest text-[10px]">Staging Standards</h4>
-            <p>H0: Healthy Baseline</p>
-            <p>E1: Early Penetration (1-3mm)</p>
-            <p>E2: Mid Sporulation (5-12mm)</p>
-            <p>E3: Late Necrosis (>12mm)</p>
-          </div>
-          <div className="space-y-3">
-            <h4 className="text-white font-bold uppercase tracking-widest text-[10px]">Pathogen Profile</h4>
-            <p>Agent: Cercospora spp.</p>
-            <p>Class: Deuteromycetes</p>
-            <p>Survival: Mycelia on debris</p>
-            <p>Risk: High humidity spread</p>
-          </div>
-          <div className="space-y-4">
-            <h4 className="text-white font-bold uppercase tracking-widest text-[10px]">Support</h4>
-            <p>Documentation</p>
-            <p>Research Citation</p>
-            <p className="pt-2 text-[10px] opacity-50 uppercase font-black">Powered by Gemini 3 Flash</p>
-          </div>
-        </div>
-        <div className="max-w-7xl mx-auto px-4 mt-12 pt-8 border-t border-slate-800 text-center">
-          <p className="text-[10px] uppercase font-bold tracking-widest opacity-40">© 2024 Agricultural Research Initiative • Professional Diagnosis Advised</p>
-        </div>
+      <footer className="bg-slate-900 text-slate-500 py-12 border-t border-white/5">
+         <div className="max-w-7xl mx-auto px-4 text-center">
+            <div className="flex items-center justify-center gap-2 text-white mb-6"><Leaf className="w-6 h-6 text-emerald-500" /><span className="text-xl font-black tracking-tighter">PhytoScan</span></div>
+            <p className="text-[10px] uppercase font-black tracking-widest opacity-40 mb-2">Advanced Agricultural Research Toolkit</p>
+            <p className="text-[10px] leading-relaxed max-w-lg mx-auto opacity-30">PhytoScan utilizes deep learning for advisory identification. All data stays local to your device.</p>
+         </div>
       </footer>
 
       <style>{`
-        @keyframes scan {
-          0% { top: 0; }
-          100% { top: 100%; }
-        }
-        .no-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
+        @keyframes scan { 0% { top: 0; opacity: 0; } 5% { opacity: 1; } 95% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
       `}</style>
     </div>
   );

@@ -3,7 +3,8 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { DISEASE_DATABASE } from "./constants";
 import { DiseaseStage } from "./types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+// Corrected: Use process.env.API_KEY directly as required by guidelines.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const analyzePlantImage = async (base64Image: string) => {
   try {
@@ -28,6 +29,7 @@ export const analyzePlantImage = async (base64Image: string) => {
               - lesionCount: (number)
               - avgLesionSize: (number in mm)
               - explanation: (short summary)
+              - reasoningForFarmer: (A simple explanation for a farmer: explain WHY you chose this stage based on visual evidence like spot color, size, or spread. Use plain language.)
               - detectedSymptoms: (list of specific visual cues you see in this EXACT image, e.g., "Distinct purple borders", "Small circular spots", "Yellow halos")
               - visualEvidenceRegions: (description of where the most prominent lesions are, e.g., "center-left", "along leaf edges")
               `
@@ -45,17 +47,19 @@ export const analyzePlantImage = async (base64Image: string) => {
             lesionCount: { type: Type.NUMBER },
             avgLesionSize: { type: Type.NUMBER },
             explanation: { type: Type.STRING },
+            reasoningForFarmer: { type: Type.STRING },
             detectedSymptoms: {
               type: Type.ARRAY,
               items: { type: Type.STRING }
             },
             visualEvidenceRegions: { type: Type.STRING }
           },
-          required: ["stage", "confidence", "lesionCount", "avgLesionSize", "explanation", "detectedSymptoms", "visualEvidenceRegions"]
+          required: ["stage", "confidence", "lesionCount", "avgLesionSize", "explanation", "reasoningForFarmer", "detectedSymptoms", "visualEvidenceRegions"]
         }
       }
     });
 
+    // Directly access the .text property of GenerateContentResponse.
     const data = JSON.parse(response.text);
     return data;
   } catch (error) {

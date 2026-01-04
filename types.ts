@@ -3,6 +3,14 @@ import { LucideIcon } from 'lucide-react';
 
 export type DiseaseStage = 'H0' | 'E1' | 'E2' | 'E3' | 'N0';
 
+export interface UserFeedback {
+  id: string;
+  analysisId: string;
+  isCorrect: boolean;
+  userSuggestedStage?: DiseaseStage;
+  timestamp: string;
+}
+
 export interface TreatmentProtocol {
   immediate: string[];
   preventive?: string[];
@@ -42,6 +50,7 @@ export interface ImageQuality {
 }
 
 export interface AnalysisResult {
+  id: string;
   stage: DiseaseStage;
   confidence: number;
   disease: DiseaseInfo;
@@ -56,8 +65,10 @@ export interface AnalysisResult {
     overexposed?: boolean;
   } | null;
   aiExplanation?: string;
+  reasoningForFarmer: string;
   detectedSymptoms: string[];
   visualEvidenceRegions: string;
+  userFeedback?: UserFeedback;
 }
 
 export interface HistoryItem {
@@ -68,4 +79,5 @@ export interface HistoryItem {
   confidence: number;
   severityScore: string;
   thumbnail?: string;
+  userFeedback?: UserFeedback;
 }
